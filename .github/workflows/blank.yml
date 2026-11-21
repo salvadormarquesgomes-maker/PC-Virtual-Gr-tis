@@ -1,0 +1,71 @@
+
+name: PC Virtual Linux
+
+on:
+  workflow_dispatch:
+
+jobs:
+  pc-virtual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      # 1. Instalar servidor de área de trabalho
+      - name: Instalar Servidor de Área de Trabalho
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            xfce4 \
+            xfce4-goodies \
+            tigervnc-standalone-server \
+            dbus-x11 \
+            curl
+
+      # 2. Instalar o Ngrok
+      - name: Instalar o Ngrok
+        uses: ngrok/ngrok-action@v1
+        with:
+          auth-token: ${{ secrets.NGROK_AUTH_TOKEN }}
+
+      # 3. Configurar e iniciar servidor VNC
+      - name: Iniciar Servidor VNC
+        env:
+          VNC_PASSWORD: ${{ secrets.VNC_PASSWORD }}
+        run: |
+          mkdir -p ~/.vnc
+          chmod 700 ~/.vnc
+
+          printf '%s\n' "$VNC_PASSWORD" | \
+            vncpasswd -f > ~/.vnc/passwd
+
+          chmod 600 ~/.vnc/passwd
+
+          cat > ~/.vnc/xstartup <<'EOF'
+          #!/bin/sh
+          unset SESSION_MANAGER
+          unset DBUS_SESSION_BUS_ADDRESS
+          exec startxfce4
+          EOF
+
+          chmod +x ~/.vnc/xstartup
+
+          vncserver :1 \
+            -localhost yes \
+            -geometry 1280x720 \
+            -depth 24 \
+            -SecurityTypes VncAuth
+
+      # 4. Criar ligação Ngrok TCP
+      - name: Expor via Ngrok TCP
+        run: |
+          ngrok tcp 5901 --log stdout > ngrok.log 2>&1 &
+          sleep 10
+          cat ngrok.log
+
+      # 5. Manter máquina ativa
+      - name: Manter Máquina Ativa
+        run: |
+          echo "PC Virtual iniciado!"
+          echo "A sessão é temporária."
+          sleep 21000
+          
